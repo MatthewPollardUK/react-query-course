@@ -1,12 +1,13 @@
-import { useQuery } from "@tanstack/react-query"
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query"
 import { useParams } from "react-router-dom";
 import { relativeDate } from "../helpers/relativeDate";
+import useScrollToBottomAction from "../helpers/useScrollToBottomAction";
 import { useUserData } from "../helpers/useUserData";
 import IssueAssignment from "./IssueAssignment";
 import { IssueHeader } from "./IssueHeader";
 import IssueLabels from "./IssueLabels";
 import IssueStatus from "./IssueStatus";
-
+import Loader from "./Loader";
 
 
 function useIssueData(issueNumber) {
@@ -16,9 +17,20 @@ function useIssueData(issueNumber) {
 }
 
 function useIssueComments(issueNumber) {
-  return useQuery(["issues", issueNumber, "comments"], ({signal}) =>  {
-    return fetch(`/api/issues/${issueNumber}/comments`, {signal}).then(res => res.json())
-  })
+  return useInfiniteQuery(
+    ["issues", issueNumber, "comments"]
+    , ({signal, pageParam = 1}) =>  {
+    return fetch(`/api/issues/${issueNumber}/comments?page=${pageParam}`,  {
+      signal
+    }).then((res) => res.json())
+  }, 
+  {
+    getNextPageParam: (lastPage, pages) => {
+      if (lastPage.length === 0) return;
+      return pages.length + 1;
+    },
+  }
+  );
 }
 
 function Comment({comment, createdBy, createdDate}) {
@@ -51,7 +63,10 @@ export default function IssueDetails() {
   const issueQuery = useIssueData(number);
   const commentsQuery = useIssueComments(number);
 
-  return <div className="issue-details">
+  useScrollToBottomAction(document, commentsQuery.fetchNextPage, 100)
+
+  return (
+     <div className="issue-details">
   {issueQuery.isLoading ? <p>Loading issue...</p> : <> 
      <IssueHeader {...issueQuery.data} />
 
@@ -60,11 +75,11 @@ export default function IssueDetails() {
        {commentsQuery.isLoading ? (
          <p>Loading...</p> 
         ) : (
-         commentsQuery.data?.map((comment) =>  (
+         commentsQuery.data?.pages.map((commentPage) => commentPage.map(comment =>  (
           <Comment key={comment.id} {...comment} />
-          ))
+          )))
          )}  
-
+        {commentsQuery.isFetchingNextPage && <Loader />} 
       </section>
 
       <aside>
@@ -86,4 +101,5 @@ export default function IssueDetails() {
   </>}
 
   </div>
+  )
 }

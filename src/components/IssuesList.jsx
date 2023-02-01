@@ -5,22 +5,32 @@ import fetchWithError from "../helpers/fetchWithError";
 import Loader from "./Loader";
 
 
-export default function IssuesList({ labels, status }) {
+export default function IssuesList({ labels, status, pageNum, setPageNum }) {
   const queryClient = useQueryClient();
-  const issuesQuery = useQuery(["issues", { labels, status }], async ({signal}) => {
+  const issuesQuery = useQuery(
+    ["issues", { labels, status, pageNum }],
+  async ({signal}) => {
     const statusString = status ? `&status=${status}` : "";
     const labelsString = labels.map((label) => `labels[]=${label}`).join("&");
-   const results = await fetchWithError(`/api/issues?${labelsString}${statusString}`, {
+    const paginationString = pageNum ? `&page=${pageNum}` : ''     
+
+   const results = await fetchWithError(
+    `/api/issues?${labelsString}${statusString}${paginationString}`,
+    {
       signal,
-    });
-     
+    }
+    );     
     results.forEach((issue) => {
       queryClient.setQueryData(["issues", issue.number.toString()], issue);
     })
 
     return results;
 
-  });
+  },
+  {
+   keepPreviousData: true,
+  }
+  );
   const [searchValue, setSearchValue] = useState("");
 
   const searchQuery = useQuery(
@@ -53,13 +63,16 @@ export default function IssuesList({ labels, status }) {
           }}
         />
       </form>
-      <h2>Issues List {issuesQuery.isFetching ? <Loader /> : null} </h2>
+      <h2>
+      Issues List {issuesQuery.isFetching ? <Loader /> : null}
+       </h2>
       {issuesQuery.isLoading ? (
         <p>Loading...</p>
       ) : issuesQuery.isError ? (
          <p>{issuesQuery.error.message}</p>
        ) :  searchQuery.fetchStatus === "idle" &&
         searchQuery.isLoading === true ? (
+          <>
         <ul className="issues-list">
           {issuesQuery.data.map((issue) => (
             <IssueItem
@@ -75,6 +88,32 @@ export default function IssuesList({ labels, status }) {
             />
           ))}
         </ul>
+        <div className="pagination">
+          <button
+          onClick={() => {
+            if (pageNum - 1 > 0) {
+              setPageNum(pageNum - 1);
+            }
+          }}
+          disabled={pageNum === 1}
+          >
+          Previous
+          </button>
+          <p>
+          Page {pageNum}{issuesQuery.isFetching ? "..." : ""}
+          </p>
+          <button
+           onClick={() => {
+            if (issuesQuery.data?.length !== 0 && !issuesQuery.isPreviousData){
+              setPageNum(pageNum + 1)
+            }
+           }}
+           disabled={issuesQuery.data?.length === 0 || issuesQuery.isPreviousData}
+          >
+          Next
+          </button>
+        </div>
+        </>
       ) : (
         <>
           <h2>Search Results</h2>
